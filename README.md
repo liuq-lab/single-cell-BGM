@@ -31,7 +31,6 @@ Compressed `.gz` versions are also supported.
 ├── train.py
 ├── evaluate.py
 ├── evaluate.ipynb
-├── requirements.txt
 └── README.md
 ```
 
