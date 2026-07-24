@@ -31,9 +31,8 @@ Compressed `.gz` versions are also supported.
 ├── train.py
 ├── evaluate.py
 ├── evaluate.ipynb
-├── requirement.txt
+├── requirements.txt
 └── README.md
-```
 
 - `preprocess.py` creates the train, validation, and test splits.
 - `autoencoder.py` trains the scDiffusion-style deterministic autoencoder.
@@ -47,6 +46,7 @@ Python 3.9 is recommended.
 
 ```bash
 python -m pip install -r requirements.txt
+```
 
 ## Data split
 
