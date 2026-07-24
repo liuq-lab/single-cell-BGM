@@ -41,6 +41,13 @@ Compressed `.gz` versions are also supported.
 - `evaluate.py` contains final-test metrics and plotting functions.
 - `evaluate.ipynb` audits the split, evaluates the frozen model, and plots the results.
 
+## Installation
+
+Python 3.9 is recommended.
+
+```bash
+python -m pip install -r requirements.txt
+
 ## Data split
 
 The full dataset is first divided into 80% development data and 20% final test
