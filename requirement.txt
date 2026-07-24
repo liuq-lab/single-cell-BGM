@@ -1,0 +1,11 @@
+bayesgm==1.0.2
+ipykernel==6.31.0
+jupyterlab==4.5.9
+matplotlib==3.9.4
+numpy==1.24.2
+pandas==1.5.3
+scanpy==1.10.3
+tensorflow-probability==0.18.0
+tensorflow==2.10.0
+torch==2.8.0+cu128
+umap-learn==0.5.12
