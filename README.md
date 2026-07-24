@@ -33,6 +33,7 @@ Compressed `.gz` versions are also supported.
 ├── evaluate.ipynb
 ├── requirements.txt
 └── README.md
+```
 
 - `preprocess.py` creates the train, validation, and test splits.
 - `autoencoder.py` trains the scDiffusion-style deterministic autoencoder.
