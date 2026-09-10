@@ -25,7 +25,7 @@ Training phases
 ---------------
 1. Conditional EGM warm start.
 2. Alternating generator / per-cell latent MAP updates with
-   conditional MMD, Step-1 anchor, and learnable-variance regularization.
+   conditional MMD and learnable-variance regularization.
 3. Validation checkpoint selection by the shared per-class PCA20/kNN10 iLISI.
    Nearest-centroid label fidelity remains a reported diagnostic only.
 """
@@ -1123,7 +1123,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--variance-log-prior-weight", type=float, default=5.0)
     parser.add_argument("--variance-bounds-weight", type=float, default=10.0)
     parser.add_argument("--mmd-weight", type=float, default=50.0)
-    parser.add_argument("--anchor-weight", type=float, default=0.10)
     parser.add_argument(
         "--mmd-samples",
         type=int,
@@ -2025,7 +2024,6 @@ def make_step2_updates(
     model,
     args: argparse.Namespace,
     data_z: tf.Variable,
-    anchor_variables: Sequence[tf.Tensor],
     num_classes: int,
 ):
     # Freeze only the BatchNorm moving statistics in the MLP variant.  For the
@@ -2038,9 +2036,6 @@ def make_step2_updates(
         for variable in model.g_net.trainable_variables
         if id(variable) not in variance_ids
     ]
-    if len(mean_variables) != len(anchor_variables):
-        raise RuntimeError("Step-1 anchor variable count does not match generator")
-
     mean_optimizer = tf.keras.optimizers.Adam(
         args.generator_lr, beta_1=0.9, beta_2=0.99
     )
@@ -2085,12 +2080,6 @@ def make_step2_updates(
                 batch_x, batch_y, prior_mean, prior_y, num_classes
             )
 
-            anchor_terms = [
-                tf.reduce_mean(tf.square(variable - frozen))
-                for variable, frozen in zip(mean_variables, anchor_variables)
-            ]
-            anchor = tf.add_n(anchor_terms) / float(max(len(anchor_terms), 1))
-
             # NLL uses a safe bounded variance.  The regularizer deliberately
             # keeps the unclipped upper tail so values above variance_max still
             # receive a gradient pulling them back.
@@ -2114,7 +2103,6 @@ def make_step2_updates(
             total = (
                 nll
                 + args.mmd_weight * class_mmd
-                + args.anchor_weight * anchor
                 + variance_regularizer
             )
 
@@ -2130,7 +2118,7 @@ def make_step2_updates(
             variance_variables,
             args.gradient_clip,
         )
-        return total, nll, mse, class_mmd, anchor, variance_regularizer
+        return total, nll, mse, class_mmd, variance_regularizer
 
     @tf.function(reduce_retracing=True)
     def update_latent(
@@ -2218,19 +2206,10 @@ def run_step2(
     initialize_variance_head(
         model, args.variance_init, args.generator_variance_eps
     )
-    model.g_net.norm_layer.trainable = False
-    variance_ids = {id(variable) for variable in model.g_net.var_layer.trainable_variables}
-    mean_variables_before = [
-        variable
-        for variable in model.g_net.trainable_variables
-        if id(variable) not in variance_ids
-    ]
-    anchor_variables = [tf.identity(variable) for variable in mean_variables_before]
     update_generator, update_latent, _ = make_step2_updates(
         model,
         args,
         data_z,
-        anchor_variables,
         len(label_names),
     )
 
@@ -2298,7 +2277,7 @@ def run_step2(
         f"variance init={args.variance_init}; G lr={args.generator_lr}; "
         f"variance lr={args.variance_lr}; z lr={args.latent_lr}"
     )
-    last_generator_losses = [math.nan] * 6
+    last_generator_losses = [math.nan] * 5
     last_latent_losses = [math.nan] * 4
 
     for epoch in range(1, args.step2_epochs + 1):
@@ -2372,8 +2351,7 @@ def run_step2(
             "loss_nll_last": last_generator_losses[1],
             "loss_mse_last": last_generator_losses[2],
             "conditional_mmd_last": last_generator_losses[3],
-            "anchor_last": last_generator_losses[4],
-            "variance_regularizer_last": last_generator_losses[5],
+            "variance_regularizer_last": last_generator_losses[4],
             "latent_loss_last": last_latent_losses[0],
             "latent_nll_last": last_latent_losses[1],
             "latent_prior_last": last_latent_losses[2],
@@ -2469,7 +2447,7 @@ def write_config(
             ),
             "variance_transform": "softplus(raw_variance) + generator_variance_eps",
             "step2_objective": (
-                "Gaussian NLL + conditional MMD + Step1 anchor + variance regularizer; "
+                "Gaussian NLL + conditional MMD + variance regularizer; "
                 "alternating per-cell z MAP update"
             ),
             "selection_metric": SELECTION_METRIC,

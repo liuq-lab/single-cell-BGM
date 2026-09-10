@@ -121,7 +121,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-bgm-noise-seed", type=int, default=4244)
     parser.add_argument("--final-bgm-noise-seed", type=int, default=2029)
     parser.add_argument("--mmd-weight", type=float, default=50.0)
-    parser.add_argument("--anchor-weight", type=float, default=0.10)
     parser.add_argument("--mmd-samples", type=int, default=256)
     parser.add_argument("--gradient-clip", type=float, default=10.0)
 
@@ -873,14 +872,12 @@ def apply_gradients_clipped(
 def make_step2_update(
     model: BGM,
     args: argparse.Namespace,
-    anchor_variables: list[tf.Tensor],
 ):
     # Freeze Step-1 BatchNorm statistics; dense weights remain trainable.
     model.g_net.norm_layer.trainable = False
     variance_variables = list(model.g_net.var_layer.trainable_variables)
     variance_ids = {id(v) for v in variance_variables}
     mean_variables = [v for v in model.g_net.trainable_variables if id(v) not in variance_ids]
-    anchor_by_name = {v.name: value for v, value in zip(mean_variables, anchor_variables)}
     mean_optimizer = tf.keras.optimizers.Adam(args.generator_lr, beta_1=0.9, beta_2=0.99)
     variance_optimizer = (
         tf.keras.optimizers.Adam(args.variance_lr, beta_1=0.9, beta_2=0.99)
@@ -906,12 +903,6 @@ def make_step2_update(
             mmd_count = tf.minimum(tf.shape(prior_mu)[0], tf.shape(batch_x)[0])
             latent_mmd = adaptive_mmd_tf(prior_mu[:mmd_count], batch_x[:mmd_count])
 
-            anchor_terms = [
-                tf.reduce_mean(tf.square(v - anchor_by_name[v.name]))
-                for v in mean_variables
-                if v.name in anchor_by_name
-            ]
-            anchor = tf.add_n(anchor_terms) / max(len(anchor_terms), 1)
             if args.variance_mode == "learned":
                 log_prior = tf.reduce_mean(
                     tf.square(tf.math.log(variance_safe) - math.log(args.variance_init))
@@ -928,7 +919,6 @@ def make_step2_update(
             total = (
                 nll
                 + args.mmd_weight * latent_mmd
-                + args.anchor_weight * anchor
                 + variance_regularizer
             )
 
@@ -944,7 +934,7 @@ def make_step2_update(
             apply_gradients_clipped(
                 variance_optimizer, variance_gradients, variance_variables, args.gradient_clip
             )
-        return total, nll, mse, latent_mmd, anchor, variance_regularizer
+        return total, nll, mse, latent_mmd, variance_regularizer
 
     return update, mean_variables
 
@@ -1110,34 +1100,10 @@ def run_step2(
         args.generator_variance_eps,
     )
 
-    # ------------------------------------------------------------
-    # Snapshot the Step-1 mean-network parameters.
-    # These values are used for the Step-2 anchor penalty.
-    # ------------------------------------------------------------
-    model.g_net.norm_layer.trainable = False
-
-    variance_variable_ids = {
-        id(variable)
-        for variable in model.g_net.var_layer.trainable_variables
-    }
-
-    mean_variables_before = [
-        variable
-        for variable in model.g_net.trainable_variables
-        if id(variable) not in variance_variable_ids
-    ]
-
-    anchor_variables = [
-        tf.identity(variable)
-        for variable in mean_variables_before
-    ]
-
-    # Generator parameter update:
-    # NLL + MMD + Step-1 anchor + variance regularization.
+    # Generator parameter update: NLL + MMD + variance regularization.
     update_generator, _ = make_step2_update(
         model,
         args,
-        anchor_variables,
     )
 
     # Per-cell latent update:
@@ -1190,7 +1156,6 @@ def run_step2(
         "loss_nll_last": math.nan,
         "loss_mse_last": math.nan,
         "latent_mmd_last": math.nan,
-        "anchor_last": math.nan,
         "variance_regularizer_last": math.nan,
         "latent_loss_last": math.nan,
         "latent_nll_last": math.nan,
@@ -1263,7 +1228,7 @@ def run_step2(
 
     last_generator_losses = [
         math.nan
-    ] * 6
+    ] * 5
 
     last_latent_losses = [
         math.nan
@@ -1453,10 +1418,8 @@ def run_step2(
                 last_generator_losses[2],
             "latent_mmd_last":
                 last_generator_losses[3],
-            "anchor_last":
-                last_generator_losses[4],
             "variance_regularizer_last":
-                last_generator_losses[5],
+                last_generator_losses[4],
 
             # Per-cell latent losses.
             "latent_loss_last":
