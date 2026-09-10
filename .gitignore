@@ -1,0 +1,54 @@
+# macOS and editor metadata
+.DS_Store
+._*
+*~
+*.swp
+*.swo
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+*.egg-info/
+
+# Local configuration
+*.local.json
+*.local.yml
+*.local.yaml
+.env
+.env.*
+
+# Data, artifacts, and generated outputs
+data/
+artifacts/
+results/
+output/
+outputs/
+logs/
+checkpoints/
+wandb/
+*.h5ad
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+*.mtx
+*.mtx.gz
+*.csv.gz
+*.tsv.gz
+*.zip
+
+# Batch-job and temporary files
+*.out
+*.err
+*.tmp
+*.orig
+*.bak
+.tmp*/
